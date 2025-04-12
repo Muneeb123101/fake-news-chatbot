@@ -1,8 +1,9 @@
+import os
+import nltk
+import gdown
 from flask import Flask, request, render_template, jsonify
 import joblib
 import re
-import nltk
-import os
 from werkzeug.utils import secure_filename
 from nltk.corpus import stopwords
 from nltk.stem import WordNetLemmatizer
@@ -14,15 +15,41 @@ import tweepy
 from tweepy import errors
 from chatbot import predict_class, get_response  # Import custom chatbot
 
-app = Flask(__name__)
+# Download NLTK data
+try:
+    nltk.download('punkt', quiet=True)
+    nltk.download('wordnet', quiet=True)
+    nltk.download('stopwords', quiet=True)
+except Exception as e:
+    print(f"Error downloading NLTK data: {e}")
 
-# Load the saved model and vectorizer
+# Download .pkl files if missing (replace with your Google Drive links)
+files = [
+    ('YOUR_GOOGLE_DRIVE_LINK1', 'fake_news_model.pkl'),
+    ('YOUR_GOOGLE_DRIVE_LINK2', 'tfidf_vectorizer.pkl'),
+    ('YOUR_GOOGLE_DRIVE_LINK3', 'chatbot_model.pkl'),
+    ('YOUR_GOOGLE_DRIVE_LINK4', 'vectorizer.pkl'),
+    ('YOUR_GOOGLE_DRIVE_LINK5', 'label_encoder.pkl')
+]
+for url, file in files:
+    if not os.path.exists(file):
+        try:
+            gdown.download(url, file, quiet=False)
+        except Exception as e:
+            print(f"Error downloading {file}: {e}")
+
+# Load models
 try:
     model = joblib.load('fake_news_model.pkl')
     vectorizer = joblib.load('tfidf_vectorizer.pkl')
-except FileNotFoundError:
-    print("Error: Model or vectorizer file not found. Run the training script first.")
+    chatbot_model = joblib.load('chatbot_model.pkl')  # If needed by chatbot.py
+    chatbot_vectorizer = joblib.load('vectorizer.pkl')
+    label_encoder = joblib.load('label_encoder.pkl')
+except FileNotFoundError as e:
+    print(f"Error: Model or vectorizer file not found: {e}")
     exit()
+
+app = Flask(__name__, static_folder='static', template_folder='templates')
 
 # Set up cleaning tools
 lemmatizer = WordNetLemmatizer()
@@ -42,7 +69,7 @@ def preprocess_text(text):
 # Function to scrape text from a URL
 def scrape_text_from_url(url):
     try:
-        response = requests.get(url)
+        response = requests.get(url, timeout=10)
         response.raise_for_status()
         soup = BeautifulSoup(response.text, 'html.parser')
         text = soup.get_text(separator=' ')
@@ -66,13 +93,16 @@ background_features = vectorizer.transform(background_clean).toarray()
 
 # Initialize LIME and SHAP explainers
 explainer = LimeTextExplainer(class_names=['Real', 'Fake'])
-explainer_shap = shap.TreeExplainer(model, background_features)
+try:
+    explainer_shap = shap.TreeExplainer(model, background_features)
+except Exception as e:
+    print(f"Error initializing SHAP explainer: {e}")
 
-# Twitter API credentials
-consumer_key = 'zMQRY3egXLKXAvWh1lY54FstZ'
-consumer_secret = '1xHqbl5ljlo50G7z4XjunTVfhmHzTUFq4L38glGI1yhgr5G537'
-access_token = '1624944816139149314-T1otmTBecm3ISNjbAmcZcgNFwyaWaM'
-access_token_secret = 'jF2RT0qP8mLzdsEioeD4cHJUwoG9ae1ZKL1brUx6PymwB'
+# Twitter API credentials (replace with environment variables on Render)
+consumer_key = os.environ.get('TWITTER_CONSUMER_KEY', 'zMQRY3egXLKXAvWh1lY54FstZ')
+consumer_secret = os.environ.get('TWITTER_CONSUMER_SECRET', '1xHqbl5ljlo50G7z4XjunTVfhmHzTUFq4L38glGI1yhgr5G537')
+access_token = os.environ.get('TWITTER_ACCESS_TOKEN', '1624944816139149314-T1otmTBecm3ISNjbAmcZcgNFwyaWaM')
+access_token_secret = os.environ.get('TWITTER_ACCESS_TOKEN_SECRET', 'jF2RT0qP8mLzdsEioeD4cHJUwoG9ae1ZKL1brUx6PymwB')
 
 # Authenticate with Twitter API
 auth = tweepy.OAuthHandler(consumer_key, consumer_secret)
@@ -122,9 +152,12 @@ def index():
                 features = vectorizer.transform([clean_text]).toarray()
                 prediction = model.predict(features)[0]
                 probability = model.predict_proba(features)[0][prediction] * 100
-                exp = explainer.explain_instance(text, classifier_fn, num_features=5)
-                explanation = exp.as_list()
-                shap_values = explainer_shap.shap_values(features)
+                try:
+                    exp = explainer.explain_instance(text, classifier_fn, num_features=5)
+                    explanation = exp.as_list()
+                except Exception as e:
+                    explanation = [(f"Error generating LIME explanation: {e}", 0)]
+                shap_values = explainer_shap.shap_values(features) if 'explainer_shap' in globals() else []
                 shap_summary = []
                 if hasattr(shap_values, 'shape') and len(shap_values.shape) == 2:
                     for i in range(len(vectorizer.get_feature_names_out())):
@@ -133,7 +166,6 @@ def index():
                             if abs(shap_value) > 0.01:
                                 shap_summary.append((vectorizer.get_feature_names_out()[i], shap_value))
                         except IndexError:
-                            print(f"IndexError: Could not access index {i} in shap_values")
                             continue
                 shap_summary = shap_summary[:5]
                 single_result = {
@@ -154,9 +186,12 @@ def index():
                     features = vectorizer.transform([clean_text]).toarray()
                     prediction = model.predict(features)[0]
                     probability = model.predict_proba(features)[0][prediction] * 100
-                    exp = explainer.explain_instance(text, classifier_fn, num_features=5)
-                    explanation = exp.as_list()
-                    shap_values = explainer_shap.shap_values(features)
+                    try:
+                        exp = explainer.explain_instance(text, classifier_fn, num_features=5)
+                        explanation = exp.as_list()
+                    except Exception as e:
+                        explanation = [(f"Error generating LIME explanation: {e}", 0)]
+                    shap_values = explainer_shap.shap_values(features) if 'explainer_shap' in globals() else []
                     shap_summary = []
                     if hasattr(shap_values, 'shape') and len(shap_values.shape) == 2:
                         for i in range(len(vectorizer.get_feature_names_out())):
@@ -165,7 +200,6 @@ def index():
                                 if abs(shap_value) > 0.01:
                                     shap_summary.append((vectorizer.get_feature_names_out()[i], shap_value))
                             except IndexError:
-                                print(f"IndexError: Could not access index {i} in shap_values")
                                 continue
                     shap_summary = shap_summary[:5]
                     single_result = {
@@ -195,9 +229,12 @@ def index():
                             features = vectorizer.transform([clean_text]).toarray()
                             prediction = model.predict(features)[0]
                             probability = model.predict_proba(features)[0][prediction] * 100
-                            exp = explainer.explain_instance(text.strip(), classifier_fn, num_features=5)
-                            explanation = exp.as_list()
-                            shap_values = explainer_shap.shap_values(features)
+                            try:
+                                exp = explainer.explain_instance(text.strip(), classifier_fn, num_features=5)
+                                explanation = exp.as_list()
+                            except Exception as e:
+                                explanation = [(f"Error generating LIME explanation: {e}", 0)]
+                            shap_values = explainer_shap.shap_values(features) if 'explainer_shap' in globals() else []
                             shap_summary = []
                             if hasattr(shap_values, 'shape') and len(shap_values.shape) == 2:
                                 for i in range(len(vectorizer.get_feature_names_out())):
@@ -206,7 +243,6 @@ def index():
                                         if abs(shap_value) > 0.01:
                                             shap_summary.append((vectorizer.get_feature_names_out()[i], shap_value))
                                     except IndexError:
-                                        print(f"IndexError: Could not access index {i} in shap_values")
                                         continue
                             shap_summary = shap_summary[:5]
                             batch_results.append({
@@ -237,14 +273,20 @@ def predict_tweet():
         features = vectorizer.transform([clean_text]).toarray()
         prediction = model.predict(features)[0]
         probability = model.predict_proba(features)[0][prediction] * 100
-        exp = explainer.explain_instance(text, classifier_fn, num_features=5)
-        explanation = exp.as_list()
-        shap_values = explainer_shap.shap_values(features)
+        try:
+            exp = explainer.explain_instance(text, classifier_fn, num_features=5)
+            explanation = exp.as_list()
+        except Exception as e:
+            explanation = [(f"Error generating LIME explanation: {e}", 0)]
+        shap_values = explainer_shap.shap_values(features) if 'explainer_shap' in globals() else []
         shap_summary = []
         for i in range(len(vectorizer.get_feature_names_out())):
-            shap_value = float(shap_values[0][i])
-            if abs(shap_value) > 0.01:
-                shap_summary.append((vectorizer.get_feature_names_out()[i], shap_value))
+            try:
+                shap_value = float(shap_values[0][i])
+                if abs(shap_value) > 0.01:
+                    shap_summary.append((vectorizer.get_feature_names_out()[i], shap_value))
+            except IndexError:
+                continue
         shap_summary = shap_summary[:5]
         single_result = {
             'prediction': 'Fake' if prediction == 1 else 'Real',
@@ -271,5 +313,5 @@ def chat():
     
     return jsonify({'response': response, 'chat_history': chat_history})
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
