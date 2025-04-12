@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Fake News Detector</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        .chat-container { 
+            border: 1px solid #ccc; 
+            padding: 10px; 
+            margin-top: 20px; 
+            height: 300px; 
+            overflow-y: auto; 
+            background-color: #f9f9f9; 
+        }
+        .chat-message { 
+            margin: 5px 0; 
+            padding: 8px; 
+            border-radius: 5px; 
+        }
+        .user-message { 
+            background-color: #d1e7dd; 
+            text-align: right; 
+        }
+        .bot-message { 
+            background-color: #f8d7da; 
+            text-align: left; 
+        }
+        .chat-input { width: 70%; margin-top: 10px; display: inline-block; }
+        .chat-button { margin-top: 10px; margin-left: 10px; }
+        .clear-button { margin-top: 10px; margin-left: 10px; }
+    </style>
+</head>
+<body class="bg-light">
+    <div class="container mt-5">
+        <h1 class="text-center">Fake News Detector</h1>
+        <p class="text-center text-muted">This system uses AI (machine learning) to classify news articles as real or fake in real-time. It is trained on a specific dataset of news articles and may not work well on other types of text (e.g., software manuals).</p>
+
+        <!-- Loading Spinner -->
+        <div id="loading" style="display:none;" class="text-center">
+            <div class="spinner-border" role="status">
+                <span class="visually-hidden">Analyzing...</span>
+            </div>
+            <p>Analyzing... Please wait.</p>
+        </div>
+
+        <!-- Form for single text input -->
+        <h4>Enter a news article manually:</h4>
+        <form method="POST" action="/" class="mt-4">
+            <div class="form-group">
+                <textarea name="text" class="form-control" rows="5" placeholder="Paste the news article here"></textarea>
+            </div>
+            <button type="submit" name="submit_text" class="btn btn-primary btn-block">Check</button>
+        </form>
+
+        <hr>
+
+        <!-- Form for URL input -->
+        <h4>Or enter a URL to analyze a news article in real-time:</h4>
+        <form method="POST" action="/">
+            <div class="form-group">
+                <input type="text" name="url" class="form-control" placeholder="https://example.com/news-article">
+            </div>
+            <button type="submit" name="submit_url" class="btn btn-primary btn-block">Check URL</button>
+        </form>
+
+        <hr>
+
+        <!-- Form for file upload -->
+        <h4>Or upload a text file with multiple articles:</h4>
+        <p class="text-muted">Upload a .txt file with one article per line (no newlines within articles).</p>
+        <form method="POST" action="/" enctype="multipart/form-data">
+            <div class="form-group">
+                <input type="file" name="file" class="form-control-file" accept=".txt">
+            </div>
+            <button type="submit" name="submit_file" class="btn btn-secondary btn-block">Upload and Check</button>
+        </form>
+
+        <hr>
+
+        <!-- Form for tweet URL input -->
+        <h4>Or analyze a tweet in real-time:</h4>
+        <form method="POST" action="/predict_tweet" class="mt-4">
+            <div class="form-group">
+                <input type="text" name="tweet_url" class="form-control" placeholder="Enter Twitter URL (e.g., https://twitter.com/username/status/1234567890)">
+            </div>
+            <button type="submit" class="btn btn-primary btn-block">Analyze Tweet</button>
+        </form>
+
+        <!-- Chatbot Section -->
+        <hr>
+        <h4>Chat with AI Assistant</h4>
+        <div id="chat-container" class="chat-container">
+            <div id="chat-history">
+                {% if chat_history %}
+                    {% for line in chat_history.split('\n') %}
+                        {% if line.startswith('User:') %}
+                            <div class="chat-message user-message">{{ line }}</div>
+                        {% elif line.startswith('Bot:') %}
+                            <div class="chat-message bot-message">{{ line }}</div>
+                        {% endif %}
+                    {% endfor %}
+                {% endif %}
+            </div>
+            <div id="chat-loading" style="display:none;" class="text-center">
+                <div class="spinner-border spinner-border-sm" role="status">
+                    <span class="visually-hidden">Thinking...</span>
+                </div>
+                <span> Thinking...</span>
+            </div>
+        </div>
+        <form id="chat-form" class="mt-2">
+            <input type="text" id="chat-input" class="chat-input form-control" name="message" placeholder="Ask me about fake news detection...">
+            <button type="submit" class="chat-button btn btn-success">Send</button>
+            <button type="button" id="clear-chat" class="clear-button btn btn-secondary">Clear Chat</button>
+            <input type="hidden" id="chat-history-input" name="chat_history" value="{{ chat_history | safe }}">
+        </form>
+
+        <!-- Display results -->
+        {% if error %}
+            <div class="alert alert-danger mt-4">
+                <h4>Error:</h4>
+                <p>{{ error }}</p>
+            </div>
+        {% endif %}
+
+        {% if single_result %}
+            <div class="alert alert-info mt-4">
+                <h4>Prediction: {{ single_result.prediction }}</h4>
+                <p>Confidence: {{ single_result.confidence }}%</p>
+                {% if single_result.explanation %}
+                    <h4>Why the model made this prediction (LIME):</h4>
+                    <ul>
+                        {% for word, weight in single_result.explanation %}
+                            <li>{{ word }} (Influence: {{ weight | round(3) }})</li>
+                        {% endfor %}
+                    </ul>
+                {% endif %}
+                {% if single_result.shap_summary %}
+                    <h4>Model Insights (SHAP):</h4>
+                    <ul>
+                        {% for feature, value in single_result.shap_summary %}
+                            <li>{{ feature }}: {{ value | round(3) }}</li>
+                        {% endfor %}
+                    </ul>
+                {% endif %}
+                <canvas id="singleChart" width="400" height="200"></canvas>
+                <script>
+                    var ctx = document.getElementById('singleChart').getContext('2d');
+                    var chart = new Chart(ctx, {
+                        type: 'bar',
+                        data: {
+                            labels: ['Confidence'],
+                            datasets: [{
+                                label: 'Confidence Score',
+                                data: [{{ single_result.confidence }}],
+                                backgroundColor: 'rgba(54, 162, 235, 0.5)',
+                                borderColor: 'rgba(54, 162, 235, 1)',
+                                borderWidth: 1
+                            }]
+                        },
+                        options: {
+                            scales: {
+                                y: {
+                                    beginAtZero: true,
+                                    max: 100
+                                }
+                            }
+                        }
+                    });
+                </script>
+            </div>
+        {% endif %}
+
+        {% if batch_results %}
+            <div class="alert alert-info mt-4">
+                <h4>Batch Predictions:</h4>
+                <ul>
+                    {% for res in batch_results %}
+                        <li>{{ res.text }}: {{ res.prediction }} (Confidence: {{ res.confidence }}%)</li>
+                        <ul>
+                            {% for word, weight in res.explanation %}
+                                <li>{{ word }} (Influence: {{ weight | round(3) }})</li>
+                            {% endfor %}
+                        </ul>
+                        <ul>
+                            {% for feature, value in res.shap_summary %}
+                                <li>{{ feature }}: {{ value | round(3) }}</li>
+                            {% endfor %}
+                        </ul>
+                    {% endfor %}
+                </ul>
+            </div>
+            <canvas id="batchChart" width="400" height="200"></canvas>
+            <script>
+                var ctx = document.getElementById('batchChart').getContext('2d');
+                var chart = new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: {{ labels | tojson | safe }},
+                        datasets: [{
+                            label: 'Confidence Scores',
+                            data: {{ confidences | tojson | safe }},
+                            backgroundColor: 'rgba(75, 192, 192, 0.5)',
+                            borderColor: 'rgba(75, 192, 192, 1)',
+                            borderWidth: 1
+                        }]
+                    },
+                    options: {
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                max: 100
+                            }
+                        }
+                    }
+                });
+            </script>
+        {% endif %}
+    </div>
+
+    <!-- JavaScript for loading spinner and chatbot -->
+    <script>
+        // Loading spinner for forms
+        document.querySelectorAll('form:not(#chat-form)').forEach(form => {
+            form.addEventListener('submit', function() {
+                document.getElementById('loading').style.display = 'block';
+            });
+        });
+
+        // Chatbot interaction
+        document.getElementById('chat-form').addEventListener('submit', function(e) {
+            e.preventDefault();
+            const message = document.getElementById('chat-input').value.trim();
+            if (!message) return; // Ignore empty messages
+            const chatHistory = document.getElementById('chat-history-input').value;
+            document.getElementById('chat-loading').style.display = 'block';
+
+            fetch('/chat', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: `message=${encodeURIComponent(message)}&chat_history=${encodeURIComponent(chatHistory)}`
+            })
+            .then(response => response.json())
+            .then(data => {
+                const chatHistoryDiv = document.getElementById('chat-history');
+                chatHistoryDiv.innerHTML = ''; // Clear current history
+                data.chat_history.split('\n').forEach(line => {
+                    if (line.startsWith('User:')) {
+                        chatHistoryDiv.innerHTML += `<div class="chat-message user-message">${line}</div>`;
+                    } else if (line.startsWith('Bot:')) {
+                        chatHistoryDiv.innerHTML += `<div class="chat-message bot-message">${line}</div>`;
+                    }
+                });
+                document.getElementById('chat-history-input').value = data.chat_history;
+                document.getElementById('chat-input').value = '';
+                document.getElementById('chat-loading').style.display = 'none';
+                chatHistoryDiv.scrollTop = chatHistoryDiv.scrollHeight; // Auto-scroll to bottom
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                document.getElementById('chat-loading').style.display = 'none';
+            });
+        });
+
+        // Clear chat button
+        document.getElementById('clear-chat').addEventListener('click', function() {
+            document.getElementById('chat-history').innerHTML = '';
+            document.getElementById('chat-history-input').value = '';
+        });
+    </script>
+</body>
+</html>

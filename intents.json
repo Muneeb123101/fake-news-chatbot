@@ -1,0 +1,44 @@
+{
+  "intents": [
+    {
+      "tag": "greeting",
+      "patterns": ["hi", "hello", "hey", "how are you"],
+      "responses": ["Hello! How can I assist you with fake news today?", "Hi there! Ready to tackle some news?", "Hey! What’s up with your news analysis?"]
+    },
+    {
+      "tag": "goodbye",
+      "patterns": ["bye", "goodbye", "see you", "exit"],
+      "responses": ["Goodbye! Stay sharp on fake news.", "See you later!", "Catch you next time!"]
+    },
+    {
+      "tag": "thanks",
+      "patterns": ["thanks", "thank you", "appreciate it"],
+      "responses": ["You’re welcome!", "Glad to help!", "No problem!"]
+    },
+    {
+      "tag": "report_fake_news",
+      "patterns": ["I think this news is fake", "How can I report fake news?", "Is there a way to flag fake news?", "This article seems suspicious"],
+      "responses": ["You can report fake news by providing the URL or text of the article. I’ll analyze it and give you my assessment."]
+    },
+    {
+      "tag": "verify_source",
+      "patterns": ["How can I check if a source is reliable?", "Is this website trustworthy?", "What makes a news source credible?", "Can you verify this site?"],
+      "responses": ["To verify a source, look for factors like author credentials, publication date, and cross-referencing with other reputable sources."]
+    },
+    {
+      "tag": "explain_detection_method",
+      "patterns": ["How does your fake news detection work?", "What algorithm do you use to detect fake news?", "Can you explain your detection process?", "How do you spot fake news?"],
+      "responses": ["I use a machine learning model trained on a dataset of real and fake news articles. It analyzes text for patterns like sensational language or lack of credible sources."]
+    },
+    {
+      "tag": "fake_news_example",
+      "patterns": ["Give me an example of fake news", "What’s a fake news story?", "Show me a fake news sample"],
+      "responses": ["An example of fake news might be: 'Aliens Invade Florida!'—a sensational headline with no credible evidence."]
+    },
+    {
+      "tag": "unknown",
+      "patterns": ["what’s the weather", "tell me a joke", "who are you"],
+      "responses": ["I’m focused on fake news—ask me about that instead!", "I’m a fake news bot, not a comedian or weatherman. What news do you want to check?"]
+    }
+  ]
+}
