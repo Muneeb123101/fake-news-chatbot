@@ -1,6 +1,5 @@
 import os
 import nltk
-import gdown
 from flask import Flask, request, render_template, jsonify
 import joblib
 import re
@@ -23,28 +22,14 @@ try:
 except Exception as e:
     print(f"Error downloading NLTK data: {e}")
 
-# Download .pkl files if missing (replace with your Google Drive links)
-files = [
-    ('YOUR_GOOGLE_DRIVE_LINK1', 'fake_news_model.pkl'),
-    ('YOUR_GOOGLE_DRIVE_LINK2', 'tfidf_vectorizer.pkl'),
-    ('YOUR_GOOGLE_DRIVE_LINK3', 'chatbot_model.pkl'),
-    ('YOUR_GOOGLE_DRIVE_LINK4', 'vectorizer.pkl'),
-    ('YOUR_GOOGLE_DRIVE_LINK5', 'label_encoder.pkl')
-]
-for url, file in files:
-    if not os.path.exists(file):
-        try:
-            gdown.download(url, file, quiet=False)
-        except Exception as e:
-            print(f"Error downloading {file}: {e}")
-
 # Load models
 try:
     model = joblib.load('fake_news_model.pkl')
     vectorizer = joblib.load('tfidf_vectorizer.pkl')
-    chatbot_model = joblib.load('chatbot_model.pkl')  # If needed by chatbot.py
-    chatbot_vectorizer = joblib.load('vectorizer.pkl')
-    label_encoder = joblib.load('label_encoder.pkl')
+    # Chatbot models (uncomment if needed by chatbot.py)
+    # chatbot_model = joblib.load('chatbot_model.pkl')
+    # chatbot_vectorizer = joblib.load('vectorizer.pkl')
+    # label_encoder = joblib.load('label_encoder.pkl')
 except FileNotFoundError as e:
     print(f"Error: Model or vectorizer file not found: {e}")
     exit()
@@ -98,7 +83,7 @@ try:
 except Exception as e:
     print(f"Error initializing SHAP explainer: {e}")
 
-# Twitter API credentials (replace with environment variables on Render)
+# Twitter API credentials (use environment variables on Render)
 consumer_key = os.environ.get('TWITTER_CONSUMER_KEY', 'zMQRY3egXLKXAvWh1lY54FstZ')
 consumer_secret = os.environ.get('TWITTER_CONSUMER_SECRET', '1xHqbl5ljlo50G7z4XjunTVfhmHzTUFq4L38glGI1yhgr5G537')
 access_token = os.environ.get('TWITTER_ACCESS_TOKEN', '1624944816139149314-T1otmTBecm3ISNjbAmcZcgNFwyaWaM')
